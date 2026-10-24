@@ -1,0 +1,46 @@
+name: Windows drop-in build
+
+on:
+  push:
+    branches: [windows-build]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make zip
+            mingw-w64-ucrt-x86_64-clang mingw-w64-ucrt-x86_64-lld mingw-w64-ucrt-x86_64-sdl3
+            mingw-w64-ucrt-x86_64-vulkan-devel mingw-w64-ucrt-x86_64-shaderc mingw-w64-ucrt-x86_64-spirv-tools
+            mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-vulkan-memory-allocator mingw-w64-ucrt-x86_64-nasm
+
+      - name: LGPL FFmpeg (same DLL names as the official release)
+        run: bash tools/build_deps_windows.sh
+
+      - name: Release exe
+        run: make -j"$(nproc)" B=build/win-release DEPS="$PWD/build/deps-win" RELEASE=1 build/win-release/skyrecomp.exe
+
+      - name: Package drop-in
+        run: |
+          D="build/dropin/Sky Recomp"
+          mkdir -p "$D"
+          cp build/win-release/skyrecomp.exe build/win-release/skyrecomp.dll.a "$D/"
+          PATH="$PWD/build/deps-win/bin:$PATH" ldd build/win-release/skyrecomp.exe | \
+            awk '(/ucrt64/ || /deps-win/) && !/vulkan-1/ {print $3}' | sort -u | xargs -I{} cp -u {} "$D/"
+          ! ls "$D" | grep -iE 'x264|x265|xvid|postproc'
+          ls -la "$D"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkyRecomp-v1.0.6-fix-lost-wakeup-windows-dropin
+          path: build/dropin/
