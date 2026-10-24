@@ -1,0 +1,37 @@
+name: Linux test builds
+
+on:
+  push:
+    branches: [windows-build]
+  workflow_dispatch:
+
+jobs:
+  # Same build as the release AppImage (tools/linux/appimage.sh: Ubuntu 22.04 container, SDL3 / LGPL FFmpeg / shaderc
+  # bundled, glibc 2.35+). Also ships its AppDir unpacked: the same files, run without mounting the image.
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: AppImage
+        run: bash tools/linux/appimage.sh x86_64
+
+      - name: Package
+        run: |
+          mkdir -p out
+          cp build/dist/*.AppImage out/
+          sudo chown -R "$(id -u):$(id -g)" build/linux/x86_64/AppDir
+          mv build/linux/x86_64/AppDir "build/linux/x86_64/SkyRecomp-v1.0.6-fix-lost-wakeup-linux-x86_64"
+          tar -C build/linux/x86_64 -czf out/SkyRecomp-v1.0.6-fix-lost-wakeup-linux-x86_64.tar.gz \
+              SkyRecomp-v1.0.6-fix-lost-wakeup-linux-x86_64
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkyRecomp-v1.0.6-fix-lost-wakeup-linux-appimage
+          path: out/*.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkyRecomp-v1.0.6-fix-lost-wakeup-linux-unpacked
+          path: out/*.tar.gz
